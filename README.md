@@ -29,8 +29,9 @@ npm run dev
 This repo includes a GitHub Actions workflow at `.github/workflows/deploy-pages.yml`.
 After pushing to GitHub, enable Pages with **GitHub Actions** as the source.
 
-The Vite base path is inferred from the GitHub repository name. For a custom
-domain, set the repository variable `VITE_BASE_PATH` to `/`.
+The Vite base path is inferred from the GitHub repository name. For this repo,
+that should publish under `/jitsu-london-40-game/`. For a custom domain, set the
+repository variable `VITE_BASE_PATH` to `/`.
 
 ## Prototype Password Gate
 
