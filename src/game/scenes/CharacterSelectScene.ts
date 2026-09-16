@@ -66,7 +66,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       this.cards.push(this.createSenseiCard(choice, 504 + index * 272, 368));
     });
 
-    this.startHint = this.add.text(640, 646, "LEFT / RIGHT TO CHOOSE    SPACE / ENTER TO START", {
+    this.startHint = this.add.text(640, 646, "TAP SENSEI OR LEFT / RIGHT    SPACE / ENTER TO START", {
       color: "#fff0a3",
       fontSize: "20px",
       fontStyle: "bold",
@@ -108,6 +108,22 @@ export class CharacterSelectScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     container.add([shadow, highlightBack, portrait, name, dan, highlight]);
+    container.setSize(184, 232);
+    container.setInteractive(new Phaser.Geom.Rectangle(-92, -126, 184, 232), Phaser.Geom.Rectangle.Contains);
+    container.on("pointerup", () => {
+      if (this.selectionLocked) {
+        return;
+      }
+
+      const choiceIndex = SENSEI_CHOICES.findIndex((senseiChoice) => senseiChoice.id === choice.id);
+      if (choiceIndex === this.selectedIndex) {
+        this.startGrading();
+        return;
+      }
+
+      this.selectedIndex = choiceIndex;
+      this.refreshSelection();
+    });
     highlightBack.setVisible(false);
     this.highlights.push(highlight);
     this.highlights.push(highlightBack);

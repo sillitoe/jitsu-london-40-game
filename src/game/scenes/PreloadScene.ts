@@ -67,7 +67,6 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image("iconGood", assetUrl("/sprites/icon-good.png"));
     this.load.image("iconPerfect", assetUrl("/sprites/icon-perfect.png"));
     this.load.image("ninjaGaidenFont", assetUrl("/fonts/ninja-gaiden-tecmo.png"));
-    this.load.image("beltWhite", assetUrl("/sprites/belts/white.png"));
     this.load.image("beltYellow", assetUrl("/sprites/belts/yellow.png"));
     this.load.image("beltOrange", assetUrl("/sprites/belts/orange.png"));
     this.load.image("beltGreen", assetUrl("/sprites/belts/green.png"));

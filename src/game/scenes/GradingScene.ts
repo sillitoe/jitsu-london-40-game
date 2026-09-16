@@ -43,6 +43,9 @@ const ALL_INPUTS: PromptInput[] = ["LEFT", "DOWN", "RIGHT"];
 const ARCADE_FONT = '"Courier New", "Monaco", monospace';
 const ACTIVE_PLAYERS = 1;
 const MAX_FAILURES = 3;
+const BELT_LADDER_GRADES = grades.filter((grade) => grade.id !== "white");
+const BELT_LADDER_SPACING = 43;
+const BELT_LADDER_START_X = 640 - ((BELT_LADDER_GRADES.length - 1) * BELT_LADDER_SPACING) / 2;
 const TORI_TARGET_HEIGHT = 254;
 const UKE_TARGET_HEIGHT = 274;
 const CHARACTER_FOOT_Y = 538;
@@ -102,7 +105,6 @@ export class GradingScene extends Phaser.Scene {
   private techniqueTitleText!: Phaser.GameObjects.Text;
   private lifeIcons: Phaser.GameObjects.Text[] = [];
   private lostLifeIndexes = new Set<number>();
-  private beltSelectionBox!: Phaser.GameObjects.Rectangle;
   private beltGradingText!: Phaser.GameObjects.Text;
   private steveText!: Phaser.GameObjects.Text;
   private garethText!: Phaser.GameObjects.Text;
@@ -127,6 +129,8 @@ export class GradingScene extends Phaser.Scene {
   private beatTiles: BeatTile[] = [];
   private phaseOverlayItems: PhaseOverlayItem[] = [];
   private beltMarkers: Phaser.GameObjects.Image[] = [];
+  private touchStart?: { x: number; y: number; time: number };
+  private recentTapTimes: number[] = [];
 
   constructor() {
     super("GradingScene");
@@ -613,7 +617,7 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private drawBeltLadder(): void {
-    this.drawArcadeFrame(640, 689, 450, 62, 0x00e7ff, 1);
+    this.drawArcadeFrame(640, 689, 410, 62, 0x00e7ff, 1);
     this.drawArcadeFrame(640, 664, 258, 24, 0x00e7ff, 1, UI_DEPTH + 0.8);
     this.beltGradingText = this.add.text(640, 664, this.bottomGradingLabel(), {
       color: "#fff0a3",
@@ -623,12 +627,8 @@ export class GradingScene extends Phaser.Scene {
       stroke: "#050913",
       strokeThickness: 3,
     }).setOrigin(0.5).setDepth(UI_DEPTH + 1);
-    this.beltSelectionBox = this.add.rectangle(468, 704, 40, 34, 0x080a11, 0.95)
-      .setStrokeStyle(4, 0xfff044, 1)
-      .setDepth(UI_DEPTH + 1);
-
-    grades.forEach((grade, index) => {
-      const x = 468 + index * 43;
+    BELT_LADDER_GRADES.forEach((grade, index) => {
+      const x = BELT_LADDER_START_X + index * BELT_LADDER_SPACING;
       const marker = this.add.image(x, 704, grade.beltSprite).setDisplaySize(28, 28).setDepth(UI_DEPTH + 2);
       this.beltMarkers.push(marker);
     });
@@ -766,8 +766,47 @@ export class GradingScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown-DOWN", () => this.handleInput("DOWN"));
     this.input.keyboard?.on("keydown-RIGHT", () => this.handleInput("RIGHT"));
     this.input.keyboard?.on("keydown-X", () => this.handleInput("X"));
-    this.input.keyboard?.on("keydown-SPACE", () => this.triggerWisdom());
+    this.input.keyboard?.on("keydown-SPACE", () => this.handleInput("X"));
+    this.input.keyboard?.on("keydown-ENTER", () => this.triggerWisdom());
     this.input.keyboard?.on("keydown-ESC", () => this.resetGame());
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      this.touchStart = { x: pointer.x, y: pointer.y, time: this.currentSceneTime() };
+    });
+    this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => this.handleTouchInput(pointer));
+  }
+
+  private handleTouchInput(pointer: Phaser.Input.Pointer): void {
+    if (!this.touchStart) {
+      return;
+    }
+
+    const dx = pointer.x - this.touchStart.x;
+    const dy = pointer.y - this.touchStart.y;
+    const distance = Math.hypot(dx, dy);
+    const now = this.currentSceneTime();
+    this.touchStart = undefined;
+
+    if (distance < 24) {
+      this.recentTapTimes = [...this.recentTapTimes.filter((tapTime) => now - tapTime < 650), now];
+      if (this.recentTapTimes.length >= 3) {
+        this.recentTapTimes = [];
+        this.triggerWisdom();
+        return;
+      }
+
+      this.handleInput("X");
+      return;
+    }
+
+    this.recentTapTimes = [];
+    if (Math.abs(dx) > Math.abs(dy)) {
+      this.handleInput(dx < 0 ? "LEFT" : "RIGHT");
+      return;
+    }
+
+    if (dy > 0) {
+      this.handleInput("DOWN");
+    }
   }
 
   private startPattern(): void {
@@ -1220,8 +1259,8 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private showExaminerSpeech(speaker: "STEVE" | "GARETH", message: string): void {
-    const x = speaker === "STEVE" ? 246 : 902;
-    const y = 270;
+    const x = speaker === "STEVE" ? 390 : 890;
+    const y = 238;
     const pointerX = speaker === "STEVE" ? x + 142 : x - 142;
     const pointerPoints = speaker === "STEVE"
       ? ([0, -12, 72, 0, 0, 12] as const)
@@ -1934,14 +1973,10 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private updateBeltLadder(): void {
-    const activeIndex = grades.findIndex((grade) => grade.id === this.activeRound.grade);
     this.beltGradingText?.setText(this.bottomGradingLabel());
-    if (activeIndex >= 0) {
-      this.beltSelectionBox.setX(468 + activeIndex * 43);
-    }
 
     this.beltMarkers.forEach((marker, index) => {
-      const isActive = grades[index]?.id === this.activeRound.grade;
+      const isActive = BELT_LADDER_GRADES[index]?.id === this.activeRound.grade;
       marker.setDisplaySize(isActive ? 30 : 28, isActive ? 30 : 28);
       marker.setAlpha(isActive ? 1 : 0.72);
     });
@@ -2113,7 +2148,6 @@ export class GradingScene extends Phaser.Scene {
       this.scoreText,
       this.techniqueTitleText,
       this.multiplierText,
-      this.beltSelectionBox,
       this.beltGradingText,
       this.steveText,
       this.garethText,
@@ -2128,8 +2162,6 @@ export class GradingScene extends Phaser.Scene {
       marker.setDepth(UI_DEPTH + 2);
       this.children.bringToTop(marker);
     });
-    this.beltSelectionBox.setDepth(UI_DEPTH + 1);
-    this.children.bringToTop(this.beltSelectionBox);
     this.beltMarkers.forEach((marker) => this.children.bringToTop(marker));
 
     this.phaseOverlayItems.forEach((item) => {
