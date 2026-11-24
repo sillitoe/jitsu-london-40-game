@@ -34,9 +34,6 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_AUTH_USERNAME_SHA256: ${{ secrets.VITE_AUTH_USERNAME_SHA256 }}
-          VITE_AUTH_PASSWORD_SHA256: ${{ secrets.VITE_AUTH_PASSWORD_SHA256 }}
-          VITE_AUTH_REALM: ${{ vars.VITE_AUTH_REALM }}
           VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
 
       - name: Setup Pages

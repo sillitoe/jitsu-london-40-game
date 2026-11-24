@@ -23,8 +23,8 @@ Tsukuri:
 - The student must move out of the way of the attack at the right moment.
 - Instructor phrases include "move your feet" and "get off the line".
 - Prototype camera: exaggerated manga close-up of uke's punch coming towards tori's face.
-- Prototype mechanic: one fast playhead pass over one input tile, with a relatively large GOOD window so the player can learn the rhythm.
-- Bad timing fails the technique immediately and tori gets punched in the face.
+- A needle sweeps back and forth across an arc. Press or swipe the indicated direction when it enters the shrinking hit patch on that side. The gold centre is the PERFECT zone.
+- Earlier grades allow three sweeps and later grades allow two, with one step attempt per sweep. If every opportunity passes without a hit, the technique fails.
 
 Kuzushi:
 - Breaking balance.
@@ -62,7 +62,7 @@ The v0.1 ladder has one attacker per belt grade. The student's belt colour, play
 
 | Phase | Input | Instructor Callout | Intended Result |
 | --- | --- | --- | --- |
-| Tsukuri | One timed Left | GET OFF THE LINE! | Evade the incoming punch |
+| Tsukuri | Timed Left or Right in the arc | GET OFF THE LINE! | Evade the incoming punch |
 | Kuzushi | Alternate a random two-button pair rapidly | TAKE BALANCE! USE YOUR ATEMI! | Break uke's posture |
 | Kake | Direction sequence plus X | BEND YOUR KNEES! POSTURE! | Execute osoto gari |
 
@@ -88,7 +88,7 @@ Readability rules:
 - The playhead should feel like a chunky volume-slider handle: thicker than a line, but only slightly taller than the play lane.
 - Once the playhead has passed a directional icon, that icon can change to the result symbol: X for miss, tick for good, fire for perfect.
 - Each player should have their own boxed playhead panel, even while Player 2 is still placeholder-only in v0.1.
-- Tsukuri should feel fast but forgiving: one decisive input, broad GOOD window, tight PERFECT window.
+- Tsukuri starts with a broader GOOD patch that narrows over successive sweeps, with a tight PERFECT centre.
 - Kuzushi should feel frantic: alternate the displayed random two-button pair as many times as possible before the playhead reaches the end.
 - Kake should feel like the core rhythm sequence: multiple distinct inputs, judged independently in junior-grade prototype gradings.
 - Show Tsukuri, Kuzushi, and Kake as constant per-player round overlays: Player 1 in a vertical list under the top-left player area, Player 2 mirrored on the top right.
@@ -155,6 +155,8 @@ Badge colours:
 - Grading panel: red badge, white writing.
 - Sensei Marianne: white badge, black writing.
 - Sensei Garvey: red badge, white writing.
+- Sensei Ian and Sensei Shep: red badge, white writing.
+- Sensei Oliur: black badge, white writing.
 - Other instructors: white badge, red writing unless specified otherwise.
 - Students: white badge, black writing.
 
@@ -163,6 +165,8 @@ Wardrobe:
 - Steve and Gareth sit at the grading desk and should look scary/intimidating.
 - Sensei Marianne is a brown-belt instructor. She wears a white judogi, brown belt, black hakama, and no black waistcoat in the current placeholder direction.
 - Sensei Garvey is a 4th dan. He wears a white judogi, black belt, black hakama, and a black sleeveless waistcoat.
+- Sensei Ian (4th dan) and Sensei Shep (5th dan) wear a white judogi, a loose black sleeveless crossover top, and black hakama. The black belt wraps around the outside of the top and holds it tucked in.
+- Sensei Oliur (1st dan, SP) wears a white judogi, black belt, and black hakama.
 - Instructors should look towards their students, with hands in front of their mouths as if shouting advice.
 - Other instructors wear white judogi, black waistcoat, black hakama unless specified otherwise.
 - Students wear white judogi with grade belt.

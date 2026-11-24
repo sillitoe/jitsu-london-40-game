@@ -92,8 +92,6 @@ const kakeSequences: BeatPrompt[][] = [
 ];
 
 export const prototypeRounds: TechniqueRound[] = gradingSpecs.map((spec, index) => {
-  const tsukuriDuration = scaleTime(2300 - index * 90);
-  const tsukuriBeat = scaleTime(1250 - index * 45);
   const kuzushiDuration = scaleTime(3700 - index * 80);
   const kakePrompts = kakeSequences[index].map((prompt) => ({
     ...prompt,
@@ -111,21 +109,15 @@ export const prototypeRounds: TechniqueRound[] = gradingSpecs.map((spec, index) 
     phases: [
       {
         id: "tsukuri",
-        mode: "timing",
+        mode: "sweep",
         name: "Tsukuri",
         focus: "Movement / throw entry",
         camera: "Manga close-up: uke's punch drives towards tori's face.",
         instructorCallout: index < 2 ? "GET OFF THE LINE!" : "MOVE YOUR FEET!",
         result: "Tori slips outside the punch.",
         failResult: "Tori freezes and gets punched in the face.",
-        prompts: [{ atMs: tsukuriBeat, input: "LEFT" }],
+        prompts: [],
         failOnBadTiming: true,
-        durationMs: tsukuriDuration,
-        timingWindow: {
-          perfectMs: 48 - Math.min(index, 5) * 3,
-          goodMs: 430 - index * 22,
-          lateMs: 500 - index * 24,
-        },
       },
       {
         id: "kuzushi",

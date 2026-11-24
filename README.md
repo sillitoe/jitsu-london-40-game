@@ -32,24 +32,3 @@ After pushing to GitHub, enable Pages with **GitHub Actions** as the source.
 The Vite base path is inferred from the GitHub repository name. For this repo,
 that should publish under `/jitsu-london-40-game/`. For a custom domain, set the
 repository variable `VITE_BASE_PATH` to `/`.
-
-## Prototype Password Gate
-
-GitHub Pages cannot provide real server-side username/password protection. This
-project includes an optional browser prompt for casual prototype privacy.
-
-To enable it, add these GitHub Actions secrets:
-
-- `VITE_AUTH_USERNAME_SHA256`
-- `VITE_AUTH_PASSWORD_SHA256`
-
-Each value should be the SHA-256 hash of the username or password. You can make
-one locally with:
-
-```bash
-printf 'your-value-here' | shasum -a 256
-```
-
-Optionally set the repository variable `VITE_AUTH_REALM` to change the prompt
-label. For serious access control, use private hosting, Cloudflare Access, or
-another host with server-side authentication.

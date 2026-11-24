@@ -1,33 +1,11 @@
 import Phaser from "phaser";
+import { senseiRoster, senseiTexture } from "../data/sensei";
 import type { PlayableSenseiId } from "../types";
 
 const ARCADE_FONT = '"Courier New", "Monaco", monospace';
 const SELECT_BLUE = 0x00e7ff;
 
-interface SenseiChoice {
-  id: PlayableSenseiId;
-  name: string;
-  dan: string;
-  portraitKey: string;
-  flipX: boolean;
-}
-
-const SENSEI_CHOICES: SenseiChoice[] = [
-  {
-    id: "marianne",
-    name: "SENSEI MARIANNE",
-    dan: "BROWN BELT",
-    portraitKey: "portraitMarianne",
-    flipX: false,
-  },
-  {
-    id: "garvey",
-    name: "SENSEI GARVEY",
-    dan: "4TH DAN",
-    portraitKey: "portraitGarvey",
-    flipX: true,
-  },
-];
+const SENSEI_CHOICES = Object.keys(senseiRoster) as PlayableSenseiId[];
 
 export class CharacterSelectScene extends Phaser.Scene {
   private selectedIndex = 0;
@@ -63,7 +41,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     SENSEI_CHOICES.forEach((choice, index) => {
-      this.cards.push(this.createSenseiCard(choice, 504 + index * 272, 368));
+      this.cards.push(this.createSenseiCard(choice, 640 + (index - (SENSEI_CHOICES.length - 1) / 2) * 218, 368));
     });
 
     this.startHint = this.add.text(640, 646, "TAP SENSEI OR LEFT / RIGHT    SPACE / ENTER TO START", {
@@ -80,17 +58,18 @@ export class CharacterSelectScene extends Phaser.Scene {
     this.refreshSelection();
   }
 
-  private createSenseiCard(choice: SenseiChoice, x: number, y: number): Phaser.GameObjects.Container {
+  private createSenseiCard(id: PlayableSenseiId, x: number, y: number): Phaser.GameObjects.Container {
+    const choice = senseiRoster[id];
     const container = this.add.container(x, y);
     const shadow = this.add.rectangle(0, 0, 156, 156, 0x000000, 0);
     const highlightBack = this.add.rectangle(0, -42, 164, 164, 0x000000, 1);
     const highlight = this.add.rectangle(0, -42, 156, 156, 0x000000, 0)
       .setStrokeStyle(5, SELECT_BLUE, 1);
 
-    const portrait = this.add.image(0, -42, choice.portraitKey)
+    const portrait = this.add.image(0, -42, senseiTexture(id, "portrait"))
       .setDisplaySize(142, 142)
-      .setFlipX(choice.flipX);
-    const name = this.add.text(0, 66, choice.name, {
+      .setFlipX(choice.flipPortrait);
+    const name = this.add.text(0, 66, `SENSEI ${choice.name}`, {
       color: "#f5f2eb",
       fontSize: "16px",
       fontStyle: "bold",
@@ -98,7 +77,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       stroke: "#050913",
       strokeThickness: 4,
     }).setOrigin(0.5);
-    const dan = this.add.text(0, 96, choice.dan, {
+    const dan = this.add.text(0, 96, choice.rank, {
       color: "#fff0a3",
       fontSize: "15px",
       fontStyle: "bold",
@@ -108,14 +87,13 @@ export class CharacterSelectScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     container.add([shadow, highlightBack, portrait, name, dan, highlight]);
-    container.setSize(184, 232);
     container.setInteractive(new Phaser.Geom.Rectangle(-92, -126, 184, 232), Phaser.Geom.Rectangle.Contains);
     container.on("pointerup", () => {
       if (this.selectionLocked) {
         return;
       }
 
-      const choiceIndex = SENSEI_CHOICES.findIndex((senseiChoice) => senseiChoice.id === choice.id);
+      const choiceIndex = SENSEI_CHOICES.indexOf(id);
       if (choiceIndex === this.selectedIndex) {
         this.startGrading();
         return;
@@ -166,7 +144,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     this.selectionLocked = true;
-    const selectedSensei = SENSEI_CHOICES[this.selectedIndex].id;
+    const selectedSensei = SENSEI_CHOICES[this.selectedIndex];
     const music = this.selectMusic;
     if (!music) {
       this.scene.start("GradingScene", { selectedSensei });

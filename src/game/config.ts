@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene";
+import { AttractScene } from "./scenes/AttractScene";
 import { CharacterSelectScene } from "./scenes/CharacterSelectScene";
 import { GradingScene } from "./scenes/GradingScene";
 import { PreloadScene } from "./scenes/PreloadScene";
@@ -17,5 +18,5 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   physics: {
     default: "arcade",
   },
-  scene: [BootScene, PreloadScene, CharacterSelectScene, GradingScene],
+  scene: [BootScene, PreloadScene, AttractScene, CharacterSelectScene, GradingScene],
 };

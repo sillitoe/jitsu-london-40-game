@@ -22,8 +22,8 @@ export class PreloadScene extends Phaser.Scene {
 
     const frame = this.add.rectangle(width / 2, height / 2, 520, 28, 0x050913, 1)
       .setStrokeStyle(3, 0xf5f2eb, 1);
-    const bar = this.add.rectangle(frame.x - 252, frame.y, 0, 16, 0xfff044, 1)
-      .setOrigin(0, 0.5);
+    const bar = this.add.rectangle(frame.x - 252, frame.y, 504, 16, 0xfff044, 1)
+      .setOrigin(0, 0.5).setScale(0, 1);
     const detail = this.add.text(width / 2, height / 2 + 46, "0%", {
       color: "#f5f2eb",
       fontSize: "18px",
@@ -34,7 +34,7 @@ export class PreloadScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this.load.on("progress", (progress: number) => {
-      bar.setDisplaySize(504 * progress, 16);
+      bar.setScale(progress, 1);
       detail.setText(`${Math.round(progress * 100)}%`);
     });
     this.load.on("fileprogress", (file: Phaser.Loader.File) => {
@@ -50,6 +50,7 @@ export class PreloadScene extends Phaser.Scene {
     this.load.audio("gradingPanicTheme", assetUrl("/audio/grading-panic-theme.wav"));
     this.load.audio("gameOverSting", assetUrl("/audio/game-over-sting.wav"));
     this.load.image("dojoBackground", assetUrl("/backgrounds/dojo-mock-background.png"));
+    this.load.image("arcadeSplash", assetUrl("/backgrounds/arcade-splash.webp"));
     this.load.image("examinerSteve", assetUrl("/sprites/examiner-steve.png"));
     this.load.image("examinerGareth", assetUrl("/sprites/examiner-gareth.png"));
     this.load.image("senseiMarianne", assetUrl("/sprites/sensei-marianne.png"));
@@ -63,6 +64,12 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image("attackerQuick", assetUrl("/sprites/attacker-quick.png"));
     this.load.image("portraitMarianne", assetUrl("/sprites/portrait-marianne.png"));
     this.load.image("portraitGarvey", assetUrl("/sprites/portrait-garvey.png"));
+    this.load.image("senseiIan", assetUrl("/sprites/sensei-ian.webp"));
+    this.load.image("senseiShep", assetUrl("/sprites/sensei-shep.webp"));
+    this.load.image("senseiOliur", assetUrl("/sprites/sensei-oliur.webp"));
+    this.load.image("portraitIan", assetUrl("/sprites/portrait-ian.webp"));
+    this.load.image("portraitShep", assetUrl("/sprites/portrait-shep.webp"));
+    this.load.image("portraitOliur", assetUrl("/sprites/portrait-oliur.webp"));
     this.load.image("iconBad", assetUrl("/sprites/icon-bad.png"));
     this.load.image("iconGood", assetUrl("/sprites/icon-good.png"));
     this.load.image("iconPerfect", assetUrl("/sprites/icon-perfect.png"));
@@ -78,6 +85,6 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.scene.start("CharacterSelectScene");
+    this.scene.start("AttractScene");
   }
 }

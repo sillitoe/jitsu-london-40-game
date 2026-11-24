@@ -1,8 +1,11 @@
 import Phaser from "phaser";
 import { grades } from "../data/grades";
+import { senseiRoster, senseiTexture } from "../data/sensei";
 import { prototypeRounds } from "../data/prototypeBeats";
 import { RhythmJudge } from "../systems/RhythmJudge";
+import { stepSweep, SWEEP_LIMIT, type StepDirection } from "../systems/StepSweep";
 import { WisdomMeter } from "../systems/WisdomMeter";
+import { inputIconTexture } from "../ui/inputIcons";
 import type { PlayableSenseiId, PromptInput, RhythmWindow, TechniquePhase, TechniquePhaseId, TechniqueRound, TimingJudgement } from "../types";
 
 interface BeatTile {
@@ -35,8 +38,9 @@ const YOI_NOTICE_MS = 700;
 const YOSHIN_NOTICE_MS = 600;
 const ROUND_INTRO_MS = GRADING_NOTICE_MS + STEVE_NOTICE_MS + GARETH_NOTICE_MS + YOI_NOTICE_MS + YOSHIN_NOTICE_MS;
 const PHASE_LEAD_IN_MS = 650;
+const WISDOM_LEAD_IN_MS = 1600;
+const FINAL_SCORE_HOLD_MS = 5400;
 const KUZUSHI_COMMAND_LEAD_IN_MS = 1450;
-const TSUKURI_SPEED_MULTIPLIER = 1.5;
 const DEFAULT_WINDOW: RhythmWindow = { perfectMs: 42, goodMs: 160, lateMs: 260 };
 const TOTAL_ROUNDS = prototypeRounds.length;
 const ALL_INPUTS: PromptInput[] = ["LEFT", "DOWN", "RIGHT"];
@@ -53,6 +57,10 @@ const CHARACTER_DEPTH = 10;
 const UI_DEPTH = 40;
 const SPEECH_DEPTH = 58;
 const SPECIAL_DEPTH = 1200;
+const EXAMINERS = {
+  STEVE: { texture: "examinerSteve", x: 548, mouthX: 542, mouthY: 215, side: 1 },
+  GARETH: { texture: "examinerGareth", x: 724, mouthX: 728, mouthY: 226, side: -1 },
+} as const;
 
 export class GradingScene extends Phaser.Scene {
   private readonly judge = new RhythmJudge();
@@ -67,6 +75,7 @@ export class GradingScene extends Phaser.Scene {
   private inputLockedUntil = 0;
   private lastCountdownMessage = "";
   private runComplete = false;
+  private showingFinalScore = false;
   private roundsCompleted = 0;
   private phaseFailed = false;
   private phaseHadNonPerfect = false;
@@ -101,6 +110,7 @@ export class GradingScene extends Phaser.Scene {
   private statsText!: Phaser.GameObjects.Text;
   private scoreText!: Phaser.GameObjects.Text;
   private wisdomFill!: Phaser.GameObjects.Rectangle;
+  private wisdomPrompt!: Phaser.GameObjects.Container;
   private multiplierText!: Phaser.GameObjects.Text;
   private techniqueTitleText!: Phaser.GameObjects.Text;
   private lifeIcons: Phaser.GameObjects.Text[] = [];
@@ -110,10 +120,15 @@ export class GradingScene extends Phaser.Scene {
   private garethText!: Phaser.GameObjects.Text;
   private examinerBubble?: Phaser.GameObjects.Rectangle;
   private examinerBubbleOutline?: Phaser.GameObjects.Rectangle;
-  private examinerPointer?: Phaser.GameObjects.Triangle;
+  private examinerPointer?: Phaser.GameObjects.Graphics;
   private examinerBubbleText?: Phaser.GameObjects.Text;
   private timingGuideText!: Phaser.GameObjects.Text;
   private timingTrack!: Phaser.GameObjects.Rectangle;
+  private stepDial!: Phaser.GameObjects.Graphics;
+  private stepPrompt!: Phaser.GameObjects.Image;
+  private stepCounter!: Phaser.GameObjects.Text;
+  private stepDirection: StepDirection = "LEFT";
+  private attemptedSweep = -1;
   private timingCursor!: Phaser.GameObjects.Rectangle;
   private playerTwoTimingTrack?: Phaser.GameObjects.Rectangle;
   private playerTwoTimingCursor?: Phaser.GameObjects.Rectangle;
@@ -142,7 +157,6 @@ export class GradingScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.createInputIconTextures();
     this.drawGradingHall();
     this.drawSplitScreenFrames();
     this.drawCast();
@@ -161,6 +175,7 @@ export class GradingScene extends Phaser.Scene {
     this.soundtrack.play();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.sound.stopByKey("gradingPanicTheme");
+      this.sound.stopByKey("gameOverSting");
     });
   }
 
@@ -174,6 +189,7 @@ export class GradingScene extends Phaser.Scene {
     this.inputLockedUntil = 0;
     this.lastCountdownMessage = "";
     this.runComplete = false;
+    this.showingFinalScore = false;
     this.roundsCompleted = 0;
     this.phaseFailed = false;
     this.phaseHadNonPerfect = false;
@@ -201,7 +217,7 @@ export class GradingScene extends Phaser.Scene {
   }
 
   update(): void {
-    if (this.specialInProgress) {
+    if (this.specialInProgress || this.showingFinalScore) {
       return;
     }
 
@@ -210,55 +226,6 @@ export class GradingScene extends Phaser.Scene {
     if (this.failures >= MAX_FAILURES - 1) {
       this.updateLives();
     }
-  }
-
-  private createInputIconTextures(): void {
-    const specs: Array<{ key: string; input: PromptInput }> = [
-      { key: "inputLeft", input: "LEFT" },
-      { key: "inputDown", input: "DOWN" },
-      { key: "inputRight", input: "RIGHT" },
-      { key: "inputX", input: "X" },
-    ];
-
-    specs.forEach((spec) => {
-      if (this.textures.exists(spec.key)) {
-        return;
-      }
-
-      const graphics = this.make.graphics({ x: 0, y: 0 }, false);
-      graphics.fillStyle(0x15202d, 0.9);
-      graphics.lineStyle(2, 0x26394d, 0.95);
-      graphics.fillRoundedRect(0, 0, 56, 48, 4);
-      graphics.strokeRoundedRect(0, 0, 56, 48, 4);
-      graphics.fillStyle(0xf2f4ff, 1);
-
-      if (spec.input === "X") {
-        graphics.lineStyle(9, 0xf2f4ff, 1);
-        graphics.beginPath();
-        graphics.moveTo(17, 13);
-        graphics.lineTo(39, 35);
-        graphics.moveTo(39, 13);
-        graphics.lineTo(17, 35);
-        graphics.strokePath();
-      } else {
-        const points: Record<Exclude<PromptInput, "X">, number[]> = {
-          LEFT: [14, 24, 30, 10, 30, 18, 43, 18, 43, 30, 30, 30, 30, 38],
-          RIGHT: [42, 24, 26, 10, 26, 18, 13, 18, 13, 30, 26, 30, 26, 38],
-          DOWN: [28, 39, 13, 23, 21, 23, 21, 9, 35, 9, 35, 23, 43, 23],
-        };
-        const polygon = points[spec.input];
-        graphics.beginPath();
-        graphics.moveTo(polygon[0], polygon[1]);
-        for (let index = 2; index < polygon.length; index += 2) {
-          graphics.lineTo(polygon[index], polygon[index + 1]);
-        }
-        graphics.closePath();
-        graphics.fillPath();
-      }
-
-      graphics.generateTexture(spec.key, 56, 48);
-      graphics.destroy();
-    });
   }
 
   private drawGradingHall(): void {
@@ -276,11 +243,14 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private drawCast(): void {
-    this.add.image(548, 244, "examinerSteve").setDisplaySize(126, 116);
-    this.add.image(724, 244, "examinerGareth").setDisplaySize(126, 116);
-    this.senseiMarianneSprite = this.add.image(ACTIVE_PLAYERS === 1 ? 164 : 82, 406, this.selectedSenseiSpriteKey())
+    Object.values(EXAMINERS).forEach(({ texture, x }) => {
+      this.add.image(x, 244, texture).setDisplaySize(126, 116);
+    });
+    this.examinerBubble = undefined;
+    const { height } = senseiRoster[this.selectedSensei];
+    this.senseiMarianneSprite = this.add.image(ACTIVE_PLAYERS === 1 ? 164 : 82, CHARACTER_FOOT_Y - height / 2, this.selectedSenseiSpriteKey())
       .setOrigin(0.5);
-    this.scaleSpriteToHeight(this.senseiMarianneSprite, this.selectedSensei === "marianne" ? 266 : 311);
+    this.scaleSpriteToHeight(this.senseiMarianneSprite, height);
     this.faceSensei(this.senseiMarianneSprite, "right");
     this.rememberSenseiHome(this.senseiMarianneSprite);
     if (ACTIVE_PLAYERS > 1) {
@@ -312,33 +282,15 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private selectedSenseiName(): string {
-    return this.selectedSensei === "garvey" ? "GARVEY" : "MARIANNE";
+    return senseiRoster[this.selectedSensei].name;
   }
 
   private selectedSenseiSpriteKey(): string {
-    return this.selectedSensei === "garvey" ? "senseiGarvey" : "senseiMarianne";
+    return senseiTexture(this.selectedSensei, "sensei");
   }
 
   private selectedSenseiPortraitKey(): string {
-    return this.selectedSensei === "garvey" ? "portraitGarvey" : "portraitMarianne";
-  }
-
-  private preparePhase(phase: TechniquePhase): TechniquePhase {
-    const prompts = phase.prompts.map((prompt) => ({ ...prompt }));
-
-    if (phase.id === "tsukuri" && prompts.length > 0) {
-      const direction = Phaser.Utils.Array.GetRandom(ALL_INPUTS);
-      prompts.forEach((prompt) => {
-        prompt.input = direction;
-      });
-    }
-
-    return {
-      ...phase,
-      prompts,
-      mashInputs: phase.mashInputs ? [...phase.mashInputs] : undefined,
-      timingWindow: phase.timingWindow ? { ...phase.timingWindow } : undefined,
-    };
+    return senseiTexture(this.selectedSensei, "portrait");
   }
 
   private scaleSpriteToHeight(sprite: Phaser.GameObjects.Image, targetHeight: number): void {
@@ -480,6 +432,12 @@ export class GradingScene extends Phaser.Scene {
     this.timingTrack = this.add.rectangle(timingPanelX, 626, 560, 14, 0x11151a);
     this.timingTrack.setStrokeStyle(2, 0xe1d6b8, 0.8);
     this.timingCursor = this.add.rectangle(timingPanelX - 280, 626, 9, 24, 0xfff0a3);
+    this.stepDial = this.add.graphics().setDepth(UI_DEPTH + 2);
+    this.stepPrompt = this.add.image(timingPanelX - 192, 603, "inputLeft")
+      .setDisplaySize(62, 53).setDepth(UI_DEPTH + 2);
+    this.stepCounter = this.add.text(timingPanelX + 192, 615, "", {
+      fontFamily: ARCADE_FONT, fontSize: "18px", fontStyle: "bold", color: "#cbe6eb",
+    }).setOrigin(0.5).setDepth(UI_DEPTH + 2);
 
     this.fireText = this.add.text(timingPanelX + 218, 646, "", {
       color: "#ff7a2f",
@@ -502,7 +460,7 @@ export class GradingScene extends Phaser.Scene {
 
     this.gameOverText = this.add.text(640, 344, "GAME OVER", {
       color: "#ff2438",
-      fontSize: "104px",
+      fontSize: "84px",
       fontStyle: "bold",
       fontFamily: ARCADE_FONT,
       stroke: "#050913",
@@ -554,7 +512,7 @@ export class GradingScene extends Phaser.Scene {
     const portrait = this.trackHud(this.add.image(isLeft ? x + 66 : x + 364, 82, portraitKey)
       .setDisplaySize(120, 120)
       .setDepth(UI_DEPTH + 1));
-    portrait.setFlipX(!isLeft || (isLeft && this.selectedSensei === "garvey"));
+    portrait.setFlipX(isLeft ? senseiRoster[this.selectedSensei].flipPortrait : !senseiRoster.garvey.flipPortrait);
     this.trackHud(this.add.text(x + 13, 15, isLeft ? "1P" : "2P", {
       color: "#fff7cf",
       fontSize: "22px",
@@ -608,7 +566,26 @@ export class GradingScene extends Phaser.Scene {
     const fill = this.trackHud(this.add.rectangle(barX + 4, 88, player === 1 ? 0 : 132, 10, 0xfff044).setOrigin(0, 0).setDepth(UI_DEPTH + 1));
     if (player === 1) {
       this.wisdomFill = fill;
+      this.drawWisdomPrompt(barX + 86);
     }
+  }
+
+  private drawWisdomPrompt(x: number): void {
+    const panel = this.add.rectangle(0, 0, 282, 70, 0x050913).setStrokeStyle(4, 0xffe478);
+    const tail = this.add.graphics().fillStyle(0xffe478).fillTriangle(-9, -36, 9, -36, 0, -48);
+    const keycap = this.add.rectangle(-106, 0, 42, 42, 0x15202d).setStrokeStyle(2, 0x6299b5);
+    const returnIcon = this.add.graphics().lineStyle(4, 0xf5f2eb);
+    returnIcon.lineBetween(-96, -9, -96, 6);
+    returnIcon.lineBetween(-96, 6, -117, 6);
+    returnIcon.fillStyle(0xf5f2eb).fillTriangle(-119, 6, -110, -2, -110, 14);
+    const title = this.add.text(-74, -13, "WISDOM READY!", {
+      fontFamily: ARCADE_FONT, fontStyle: "bold", fontSize: "22px", color: "#ffe478",
+    }).setOrigin(0, 0.5);
+    const controls = this.add.text(-74, 13, "RETURN / TRIPLE TAP", {
+      fontFamily: ARCADE_FONT, fontStyle: "bold", fontSize: "16px", color: "#f5f2eb",
+    }).setOrigin(0, 0.5);
+    this.wisdomPrompt = this.add.container(x, 198, [tail, panel, keycap, returnIcon, title, controls])
+      .setDepth(UI_DEPTH + 3).setVisible(false);
   }
 
   private trackHud<T extends Phaser.GameObjects.GameObject>(object: T): T {
@@ -762,9 +739,13 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private bindInput(): void {
-    this.input.keyboard?.on("keydown-LEFT", () => this.handleInput("LEFT"));
+    this.input.keyboard?.on("keydown-LEFT", (event: KeyboardEvent) => {
+      if (!event.repeat || this.activePhase.mode !== "sweep") this.handleInput("LEFT");
+    });
     this.input.keyboard?.on("keydown-DOWN", () => this.handleInput("DOWN"));
-    this.input.keyboard?.on("keydown-RIGHT", () => this.handleInput("RIGHT"));
+    this.input.keyboard?.on("keydown-RIGHT", (event: KeyboardEvent) => {
+      if (!event.repeat || this.activePhase.mode !== "sweep") this.handleInput("RIGHT");
+    });
     this.input.keyboard?.on("keydown-X", () => this.handleInput("X"));
     this.input.keyboard?.on("keydown-SPACE", () => this.handleInput("X"));
     this.input.keyboard?.on("keydown-ENTER", () => this.triggerWisdom());
@@ -817,7 +798,7 @@ export class GradingScene extends Phaser.Scene {
     this.lastMashInput = undefined;
     this.currentPhaseSuccessfulHits = 0;
     this.activeRound = prototypeRounds[this.currentRoundIndex];
-    this.activePhase = this.preparePhase(this.activeRound.phases[this.currentPhaseIndex]);
+    this.activePhase = this.activeRound.phases[this.currentPhaseIndex];
     this.currentPhaseScore = 0;
     if (this.currentPhaseIndex === 0) {
       this.phaseStatuses = {};
@@ -827,20 +808,31 @@ export class GradingScene extends Phaser.Scene {
     }
     this.activeMashInputs = this.activePhase.mode === "mash" ? this.randomMashInputs() : ["X", "RIGHT"];
     this.phaseStatuses[this.activePhase.id] = "active";
+    const wisdomReadyForKake = this.activePhase.id === "kake" && this.wisdom.isReady;
     const leadInMs = this.currentPhaseIndex === 0
       ? ROUND_INTRO_MS
       : this.activePhase.id === "kuzushi"
         ? KUZUSHI_COMMAND_LEAD_IN_MS
-        : PHASE_LEAD_IN_MS;
+        : wisdomReadyForKake ? WISDOM_LEAD_IN_MS : PHASE_LEAD_IN_MS;
     const now = this.currentSceneTime();
     this.patternStartedAt = now + leadInMs;
-    this.inputLockedUntil = now + 420;
+    this.inputLockedUntil = wisdomReadyForKake ? now : now + 420;
     this.lastCountdownMessage = "";
     this.runComplete = false;
     this.gameOverText?.setVisible(false);
     this.countdownText.setColor("#fff0a3");
 
     const phase = this.activePhase;
+    const isSweep = phase.mode === "sweep";
+    this.stepDirection = Math.random() < 0.5 ? "LEFT" : "RIGHT";
+    this.attemptedSweep = -1;
+    this.stepDial.setVisible(isSweep);
+    this.stepPrompt.setTexture(inputIconTexture(this.stepDirection)).setVisible(isSweep);
+    this.stepCounter.setVisible(isSweep);
+    this.timingTrack.setVisible(!isSweep);
+    this.timingCursor.setVisible(!isSweep);
+    this.playerTwoTimingTrack?.setVisible(!isSweep);
+    this.playerTwoTimingCursor?.setVisible(!isSweep);
     this.gradingText.setText(this.bottomGradingLabel());
     this.techniqueTitleText.setText(this.techniqueTitle());
     this.updateBeltLadder();
@@ -874,6 +866,11 @@ export class GradingScene extends Phaser.Scene {
 
     if (this.runComplete) {
       this.feedbackText.setText(this.lockedRunMessage());
+      return;
+    }
+
+    if (this.activePhase.mode === "sweep") {
+      this.handleStepInput(input);
       return;
     }
 
@@ -914,6 +911,20 @@ export class GradingScene extends Phaser.Scene {
     }
 
     if (this.currentBeatIndex >= this.activePhase.prompts.length) {
+      this.completePhase();
+    }
+  }
+
+  private handleStepInput(input: PromptInput): void {
+    if (input !== "LEFT" && input !== "RIGHT") return;
+
+    const sweep = stepSweep(this.phaseElapsedMs(), this.currentRoundIndex, this.stepDirection);
+    if (!sweep.started || sweep.expired || this.attemptedSweep === sweep.pass) return;
+
+    this.attemptedSweep = sweep.pass;
+    if (input === this.stepDirection && sweep.hit) {
+      this.stepCounter.setText("");
+      this.applyJudgement(sweep.perfect ? "PERFECT" : "GOOD");
       this.completePhase();
     }
   }
@@ -1142,7 +1153,7 @@ export class GradingScene extends Phaser.Scene {
         this.nextStepTimer = this.time.delayedCall(560, () => {
           this.nextStepTimer = undefined;
           if (this.failures >= MAX_FAILURES) {
-            this.gameOver();
+            this.showFinalScore(false);
             return;
           }
           this.completeRound(true);
@@ -1157,17 +1168,23 @@ export class GradingScene extends Phaser.Scene {
     });
   }
 
-  private gameOver(): void {
+  private showFinalScore(cleared: boolean): void {
+    this.showingFinalScore = true;
     this.runComplete = true;
+    this.countdownText.setText("");
+    this.hideExaminerSpeech();
+    this.wisdomPrompt.setVisible(false);
     this.sound.stopByKey("gradingPanicTheme");
     this.sound.play("gameOverSting", { volume: 0.72 });
-    this.countdownText.setText("GAME OVER");
-    this.countdownText.setColor("#ff4d63");
-    this.countdownText.setAlpha(1);
-    this.countdownText.setScale(1);
-    this.gameOverText.setVisible(true);
-    this.gameOverText.setAlpha(0);
-    this.gameOverText.setScale(1.35);
+    this.add.rectangle(640, 360, 1280, 720, 0x050913, 0.82).setDepth(SPEECH_DEPTH + 9);
+    this.gameOverText.setPosition(640, 308)
+      .setText(cleared ? "GRADING COMPLETE" : "GAME OVER")
+      .setColor(cleared ? "#ffe478" : "#ff2438")
+      .setDepth(SPEECH_DEPTH + 10).setVisible(true).setAlpha(0).setScale(1.15);
+    const finalScore = this.add.text(640, 400, `FINAL SCORE  ${String(this.score).padStart(6, "0")}`, {
+      color: "#fff0a3", fontFamily: ARCADE_FONT, fontSize: "44px", fontStyle: "bold",
+      stroke: "#050913", strokeThickness: 6,
+    }).setOrigin(0.5).setDepth(SPEECH_DEPTH + 10).setAlpha(0);
     this.tweens.add({
       targets: this.gameOverText,
       alpha: 1,
@@ -1175,7 +1192,13 @@ export class GradingScene extends Phaser.Scene {
       duration: 320,
       ease: "Back.easeOut",
     });
-    this.timingGuideText.setText("PRESS ESC TO RESET");
+    this.tweens.add({ targets: finalScore, alpha: 1, delay: 380, duration: 300 });
+    this.nextStepTimer = this.time.delayedCall(FINAL_SCORE_HOLD_MS, () => {
+      this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+        this.scene.start("AttractScene");
+      });
+      this.cameras.main.fadeOut(650);
+    });
   }
 
   private showSenseiSpeech(success: boolean, onComplete: () => void): void {
@@ -1259,20 +1282,17 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private showExaminerSpeech(speaker: "STEVE" | "GARETH", message: string): void {
-    const x = speaker === "STEVE" ? 390 : 890;
-    const y = 238;
-    const pointerX = speaker === "STEVE" ? x + 142 : x - 142;
-    const pointerPoints = speaker === "STEVE"
-      ? ([0, -12, 72, 0, 0, 12] as const)
-      : ([0, -12, -72, 0, 0, 12] as const);
+    const { mouthX, mouthY, side } = EXAMINERS[speaker];
+    const x = speaker === "STEVE" ? 370 : 910;
+    const y = 184;
+    const pointerX = x + side * 139;
     if (!this.examinerBubble) {
       this.examinerBubbleOutline = this.add.rectangle(x, y, 292, 60, 0x050913, 1)
         .setDepth(SPEECH_DEPTH + 3);
       this.examinerBubble = this.add.rectangle(x, y, 286, 54, 0x050913, 1)
         .setStrokeStyle(3, 0xffffff, 1)
         .setDepth(SPEECH_DEPTH + 4);
-      this.examinerPointer = this.add.triangle(pointerX, y, ...pointerPoints, 0x050913, 1)
-        .setDepth(SPEECH_DEPTH + 4);
+      this.examinerPointer = this.add.graphics().setDepth(SPEECH_DEPTH + 4.5);
       this.examinerBubbleText = this.add.text(x, y, "", {
         color: "#ffffff",
         fontSize: "16px",
@@ -1287,12 +1307,19 @@ export class GradingScene extends Phaser.Scene {
     this.examinerBubbleOutline?.setVisible(true);
     this.examinerBubble.setPosition(x, y);
     this.examinerBubble.setVisible(true);
-    this.examinerPointer?.setPosition(pointerX, y);
-    this.examinerPointer?.setTo(...pointerPoints);
-    this.examinerPointer?.setVisible(true);
+    this.examinerPointer?.clear()
+      .fillStyle(0x050913)
+      .fillTriangle(pointerX, y + 3, mouthX, mouthY, pointerX, y + 22)
+      .setVisible(true);
     this.examinerBubbleText?.setPosition(x, y);
-    this.examinerBubbleText?.setText(`${speaker}: ${message}`.toUpperCase());
-    this.examinerBubbleText?.setVisible(true);
+    const speech = `${speaker}: ${message}`.toUpperCase();
+    if (this.examinerBubbleText?.text !== speech) {
+      this.examinerBubbleText?.setText(speech);
+    }
+    if (this.examinerBubbleText) {
+      this.examinerBubbleText.setScale(Math.min(1, 46 / this.examinerBubbleText.height));
+      this.examinerBubbleText.setVisible(true);
+    }
   }
 
   private hideExaminerSpeech(): void {
@@ -1553,12 +1580,7 @@ export class GradingScene extends Phaser.Scene {
     this.scheduleGarethVerdict(failed, allPerfect);
 
     if (this.roundsCompleted >= TOTAL_ROUNDS) {
-      this.feedbackText.setText(
-        failed
-          ? "FINAL ROUND FAILED - PRESS ESC TO RESET"
-          : "GRADING COMPLETE - PRESS ESC TO RESET",
-      );
-      this.runComplete = true;
+      this.nextStepTimer = this.time.delayedCall(2600, () => this.showFinalScore(!failed));
       return;
     }
 
@@ -1620,6 +1642,7 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private playWisdomSpecial(): void {
+    this.wisdomPrompt.setVisible(false);
     const sensei = this.senseiMarianneSprite;
     this.specialInProgress = true;
     this.runComplete = true;
@@ -1861,13 +1884,16 @@ export class GradingScene extends Phaser.Scene {
       return;
     }
 
-    if (!this.wisdom.isReady) {
-      this.wisdomFill.setAlpha(1);
-      this.wisdomFill.setFillStyle(0xfff044);
-      return;
+    const ready = this.wisdom.isReady && this.activePhase.id === "kake" && !this.runComplete;
+    if (ready && !this.wisdomPrompt.visible) {
+      this.wisdomPrompt.setVisible(true).setScale(0.85).setAlpha(0);
+      this.tweens.add({ targets: this.wisdomPrompt, alpha: 1, scale: 1, duration: 260, ease: "Back.easeOut" });
+    } else if (!ready && this.wisdomPrompt.visible) {
+      this.tweens.killTweensOf(this.wisdomPrompt);
+      this.wisdomPrompt.setVisible(false);
     }
 
-    if (this.activePhase.id !== "kake") {
+    if (!ready) {
       this.wisdomFill.setAlpha(1);
       this.wisdomFill.setFillStyle(0xfff044);
       return;
@@ -2104,7 +2130,10 @@ export class GradingScene extends Phaser.Scene {
       LATE: "#4db7ff",
       MISS: "#ff4d63",
     };
-    const splash = this.add.text(640, 612, labelByJudgement[judgement], {
+    const isSweep = this.activePhase.mode === "sweep";
+    const x = isSweep ? this.playerPanelX(1) + 192 : 640;
+    const y = isSweep ? 581 : 612;
+    const splash = this.add.text(x, y, labelByJudgement[judgement], {
       color: colorByJudgement[judgement],
       fontSize: "48px",
       fontStyle: "bold",
@@ -2117,7 +2146,7 @@ export class GradingScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: splash,
-      y: 588,
+      y: y - 24,
       scale: 0.92,
       alpha: 0,
       duration: 620,
@@ -2337,7 +2366,7 @@ export class GradingScene extends Phaser.Scene {
         strokeThickness: 4,
       }).setOrigin(0.5);
       label.setVisible(false);
-      const promptIcon = this.add.image(x, iconY, this.inputIconTexture(prompt.input))
+      const promptIcon = this.add.image(x, iconY, inputIconTexture(prompt.input))
         .setDisplaySize(50, 42);
       const resultSprite = this.add.image(x, iconY, "iconGood")
         .setDisplaySize(38, 38)
@@ -2347,11 +2376,16 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private renderTimingLane(): void {
-    if (!this.timingTrack || !this.timingCursor || this.beatTiles.length === 0) {
+    if (!this.timingTrack || !this.timingCursor) {
       return;
     }
 
     const pattern = this.activePhase;
+    if (pattern.mode === "sweep") {
+      this.renderStepDial();
+      return;
+    }
+
     const rawElapsedMs = this.currentSceneTime() - this.patternStartedAt;
     const elapsedMs = this.phaseElapsedMs();
     const duration = this.patternDuration(pattern);
@@ -2460,12 +2494,59 @@ export class GradingScene extends Phaser.Scene {
       tile.goodWindow.setVisible(false);
       tile.perfectWindow.setVisible(false);
       tile.label.setVisible(false);
-      tile.promptIcon.setTexture(this.inputIconTexture(tile.input));
+      tile.promptIcon.setTexture(inputIconTexture(tile.input));
       tile.promptIcon.setAlpha(passed ? 0.88 : 1);
       tile.promptIcon.setScale(1);
       tile.promptIcon.setVisible(!isActiveMash || flashOn);
       tile.resultSprite.setVisible(false);
     });
+  }
+
+  private renderStepDial(): void {
+    if (this.runComplete) return;
+
+    const elapsedMs = this.phaseElapsedMs();
+    const sweep = stepSweep(elapsedMs, this.currentRoundIndex, this.stepDirection);
+    this.renderCountdown(elapsedMs);
+    const x = this.playerPanelX(1);
+    const y = 643;
+    const radius = 85;
+    const vertical = -Math.PI / 2;
+    const dial = this.stepDial.clear();
+    const spent = this.attemptedSweep === sweep.pass;
+    const inPatch = sweep.started && sweep.hit && !sweep.expired && !spent;
+    const sector = (start: number, end: number, color: number) => {
+      dial.fillStyle(color);
+      dial.beginPath();
+      dial.slice(x, y, radius, vertical + start, vertical + end);
+      dial.fillPath();
+    };
+
+    sector(-SWEEP_LIMIT, SWEEP_LIMIT, 0x142635);
+    sector(sweep.target - sweep.halfWidth, sweep.target + sweep.halfWidth,
+      spent ? 0x4b353c : inPatch ? 0x41d78f : 0x147756);
+    if (!spent) {
+      sector(sweep.target - sweep.perfectHalfWidth, sweep.target + sweep.perfectHalfWidth, 0xffe478);
+    }
+
+    dial.lineStyle(2, 0x6299b5);
+    dial.beginPath();
+    dial.slice(x, y, radius, vertical - SWEEP_LIMIT, vertical + SWEEP_LIMIT);
+    dial.strokePath();
+    dial.lineStyle(1, 0x9cb9ca, 0.7);
+    dial.lineBetween(x, y, x, y - radius);
+    dial.lineStyle(4, inPatch ? 0xffffff : 0xffe478);
+    dial.lineBetween(x, y, x + Math.sin(sweep.angle) * radius, y - Math.cos(sweep.angle) * radius);
+    dial.fillStyle(0xffe478);
+    dial.fillCircle(x, y, 5);
+
+    const lastPass = sweep.pass === sweep.passes - 1;
+    this.stepCounter.setText(spent ? (lastPass ? "MISSED" : "WAIT FOR NEXT SWEEP") : `SWEEP ${sweep.pass + 1} / ${sweep.passes}`);
+    if (sweep.expired) {
+      this.stepCounter.setText("OUT OF TIME");
+      this.applyJudgement("MISS");
+      this.failPhase();
+    }
   }
 
   private patternDuration(pattern: TechniquePhase): number {
@@ -2493,17 +2574,6 @@ export class GradingScene extends Phaser.Scene {
     return this.inputLabel(tile.input);
   }
 
-  private inputIconTexture(input: PromptInput): string {
-    const textures: Record<PromptInput, string> = {
-      LEFT: "inputLeft",
-      DOWN: "inputDown",
-      RIGHT: "inputRight",
-      X: "inputX",
-    };
-
-    return textures[input];
-  }
-
   private judgementTexture(judgement: TimingJudgement): string {
     if (judgement === "MISS") {
       return "iconBad";
@@ -2521,12 +2591,7 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private phaseElapsedMs(): number {
-    const rawElapsedMs = this.currentSceneTime() - this.patternStartedAt;
-    if (rawElapsedMs <= 0 || this.activePhase.id !== "tsukuri") {
-      return rawElapsedMs;
-    }
-
-    return rawElapsedMs * TSUKURI_SPEED_MULTIPLIER;
+    return this.currentSceneTime() - this.patternStartedAt;
   }
 
   private currentSceneTime(): number {
@@ -2693,6 +2758,10 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private resetGame(): void {
+    if (this.showingFinalScore) {
+      this.scene.start("AttractScene");
+      return;
+    }
     this.nextStepTimer?.remove();
     this.nextStepTimer = undefined;
     this.hideSenseiSpeech();

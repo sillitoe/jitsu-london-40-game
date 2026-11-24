@@ -10,12 +10,12 @@ export type Grade =
   | "black";
 
 export type PromptInput = "LEFT" | "DOWN" | "RIGHT" | "X";
-export type PlayableSenseiId = "marianne" | "garvey";
+export type PlayableSenseiId = "marianne" | "garvey" | "ian" | "shep" | "oliur";
 
 export type TimingJudgement = "PERFECT" | "GOOD" | "LATE" | "MISS";
 
 export type TechniquePhaseId = "tsukuri" | "kuzushi" | "kake";
-export type TechniquePhaseMode = "timing" | "mash" | "sequence";
+export type TechniquePhaseMode = "sweep" | "mash" | "sequence";
 
 export interface RhythmWindow {
   perfectMs: number;
