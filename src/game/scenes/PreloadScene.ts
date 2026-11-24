@@ -1,6 +1,15 @@
 import Phaser from "phaser";
 
 const assetUrl = (path: string): string => `${import.meta.env.BASE_URL}${path.replace(/^\//, "")}`;
+const LOADING_MESSAGES = [
+  "LOOKING FOR A CLEAN GI",
+  "FINDING THE LOST NOVICE",
+  "SEWING ON A BADGE",
+  "TIGHTENING THE BELT AGAIN",
+  "PERSUADING STEVE TO START",
+  "WAITING FOR GARETH TO SAY SOMETHING",
+  "PUTTING THE MATS THE RIGHT WAY ROUND",
+];
 
 export class PreloadScene extends Phaser.Scene {
   constructor() {
@@ -33,35 +42,60 @@ export class PreloadScene extends Phaser.Scene {
       strokeThickness: 4,
     }).setOrigin(0.5);
 
+    let currentMessage = Phaser.Utils.Array.GetRandom(LOADING_MESSAGES);
+    const status = this.add.text(width / 2, height / 2 + 78, currentMessage, {
+      color: "#fff0a3",
+      fontSize: "18px",
+      fontFamily: '"Courier New", "Monaco", monospace',
+      fontStyle: "bold",
+    }).setOrigin(0.5);
+    const rotation = this.time.addEvent({
+      delay: 1600,
+      loop: true,
+      callback: () => {
+        currentMessage = Phaser.Utils.Array.GetRandom(LOADING_MESSAGES.filter((message) => message !== currentMessage));
+        status.setText(currentMessage);
+      },
+    });
+
     this.load.on("progress", (progress: number) => {
       bar.setScale(progress, 1);
       detail.setText(`${Math.round(progress * 100)}%`);
     });
-    this.load.on("fileprogress", (file: Phaser.Loader.File) => {
-      detail.setText(`${Math.round(this.load.progress * 100)}%  ${file.key.toUpperCase()}`);
-    });
     this.load.on("loaderror", (file: Phaser.Loader.File) => {
+      rotation.remove();
       title.setText("LOAD FAILED");
-      detail.setText(file.key.toUpperCase());
-      detail.setColor("#ff4d63");
+      status.setText(file.key.toUpperCase()).setColor("#ff4d63");
     });
 
     this.load.audio("characterSelectTheme", assetUrl("/audio/character-select-theme.wav"));
     this.load.audio("gradingPanicTheme", assetUrl("/audio/grading-panic-theme.wav"));
     this.load.audio("gameOverSting", assetUrl("/audio/game-over-sting.wav"));
-    this.load.image("dojoBackground", assetUrl("/backgrounds/dojo-mock-background.png"));
-    this.load.image("arcadeSplash", assetUrl("/backgrounds/arcade-splash.webp"));
+    this.load.image("dojoBackground", assetUrl("/backgrounds/dojo-london.webp"));
+    this.load.image("arcadeSplash", assetUrl("/backgrounds/arcade-splash-ruby-v3.webp"));
     this.load.image("examinerSteve", assetUrl("/sprites/examiner-steve.png"));
     this.load.image("examinerGareth", assetUrl("/sprites/examiner-gareth.png"));
+    this.load.image("examinerSteveWalk", assetUrl("/sprites/examiner-steve-walk.webp"));
+    this.load.image("examinerGarethWalk", assetUrl("/sprites/examiner-gareth-walk.webp"));
+    this.load.image("examinerSteveWalkStep", assetUrl("/sprites/examiner-steve-step.webp"));
+    this.load.image("examinerGarethWalkStep", assetUrl("/sprites/examiner-gareth-step.webp"));
     this.load.image("senseiMarianne", assetUrl("/sprites/sensei-marianne.png"));
     this.load.image("senseiGarvey", assetUrl("/sprites/sensei-garvey.png"));
     this.load.image("studentBack", assetUrl("/sprites/student-back.png"));
     this.load.image("studentMaleBack", assetUrl("/sprites/student-male-back.png"));
     this.load.image("studentMalePunched", assetUrl("/sprites/student-male-punched.png"));
+    for (const student of ["ada", "noah", "mei"]) {
+      this.load.image(`${student}Ready`, assetUrl(`/sprites/tori-${student}-ready.webp`));
+      this.load.image(`${student}Hit`, assetUrl(`/sprites/tori-${student}-hit.webp`));
+    }
     this.load.image("attackerReady", assetUrl("/sprites/attacker-ready.png"));
     this.load.image("attackerHeavy", assetUrl("/sprites/attacker-heavy.png"));
     this.load.image("attackerThrown", assetUrl("/sprites/attacker-thrown.png"));
-    this.load.image("attackerQuick", assetUrl("/sprites/attacker-quick.png"));
+    for (const attacker of ["ruby", "imani", "kai"]) {
+      for (const pose of ["Ready", "Punch", "Thrown"]) {
+        this.load.image(attacker + pose, assetUrl(`/sprites/uke-${attacker}-${pose.toLowerCase()}.webp`));
+      }
+    }
     this.load.image("portraitMarianne", assetUrl("/sprites/portrait-marianne.png"));
     this.load.image("portraitGarvey", assetUrl("/sprites/portrait-garvey.png"));
     this.load.image("senseiIan", assetUrl("/sprites/sensei-ian.webp"));

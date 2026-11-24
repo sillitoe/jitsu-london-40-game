@@ -1,5 +1,7 @@
 import Phaser from "phaser";
 import { grades } from "../data/grades";
+import { attackers } from "../data/attackers";
+import { students } from "../data/students";
 import { senseiRoster, senseiTexture } from "../data/sensei";
 import { prototypeRounds } from "../data/prototypeBeats";
 import { RhythmJudge } from "../systems/RhythmJudge";
@@ -50,16 +52,14 @@ const MAX_FAILURES = 3;
 const BELT_LADDER_GRADES = grades.filter((grade) => grade.id !== "white");
 const BELT_LADDER_SPACING = 43;
 const BELT_LADDER_START_X = 640 - ((BELT_LADDER_GRADES.length - 1) * BELT_LADDER_SPACING) / 2;
-const TORI_TARGET_HEIGHT = 254;
-const UKE_TARGET_HEIGHT = 274;
 const CHARACTER_FOOT_Y = 538;
 const CHARACTER_DEPTH = 10;
 const UI_DEPTH = 40;
 const SPEECH_DEPTH = 58;
 const SPECIAL_DEPTH = 1200;
 const EXAMINERS = {
-  STEVE: { texture: "examinerSteve", x: 548, mouthX: 542, mouthY: 215, side: 1 },
-  GARETH: { texture: "examinerGareth", x: 724, mouthX: 728, mouthY: 226, side: -1 },
+  STEVE: { texture: "examinerSteve", walk: "examinerSteveWalk", x: 548, mouthX: 542, mouthY: 215, side: 1 },
+  GARETH: { texture: "examinerGareth", walk: "examinerGarethWalk", x: 724, mouthX: 728, mouthY: 226, side: -1 },
 } as const;
 
 export class GradingScene extends Phaser.Scene {
@@ -75,7 +75,12 @@ export class GradingScene extends Phaser.Scene {
   private inputLockedUntil = 0;
   private lastCountdownMessage = "";
   private runComplete = false;
+  private introducing = false;
+  private skipEntrance = false;
+  private attackerIndex = -1;
+  private studentIndex = -1;
   private showingFinalScore = false;
+  private floorShade!: Phaser.GameObjects.Rectangle;
   private roundsCompleted = 0;
   private phaseFailed = false;
   private phaseHadNonPerfect = false;
@@ -151,19 +156,30 @@ export class GradingScene extends Phaser.Scene {
     super("GradingScene");
   }
 
-  init(data?: { selectedSensei?: PlayableSenseiId }): void {
+  init(data?: { selectedSensei?: PlayableSenseiId; skipEntrance?: boolean }): void {
     this.selectedSensei = data?.selectedSensei ?? this.selectedSensei ?? "marianne";
     this.resetRuntimeState();
+    this.skipEntrance = data?.skipEntrance ?? false;
   }
 
   create(): void {
     this.drawGradingHall();
     this.drawSplitScreenFrames();
-    this.drawCast();
+    const { examiners, fighters } = this.drawCast();
+    if (!this.skipEntrance) {
+      this.playEntrance(examiners, fighters);
+      return;
+    }
+    this.beginGrading();
+  }
+
+  private beginGrading(): void {
+    this.floorShade.setVisible(true);
     this.drawUi();
     this.bindInput();
     this.startSoundtrack();
-    this.startPattern();
+    this.introducing = false;
+    this.startPattern(true);
   }
 
   private startSoundtrack(): void {
@@ -189,6 +205,9 @@ export class GradingScene extends Phaser.Scene {
     this.inputLockedUntil = 0;
     this.lastCountdownMessage = "";
     this.runComplete = false;
+    this.introducing = false;
+    this.attackerIndex = -1;
+    this.studentIndex = -1;
     this.showingFinalScore = false;
     this.roundsCompleted = 0;
     this.phaseFailed = false;
@@ -217,7 +236,7 @@ export class GradingScene extends Phaser.Scene {
   }
 
   update(): void {
-    if (this.specialInProgress || this.showingFinalScore) {
+    if (this.introducing || this.specialInProgress || this.showingFinalScore) {
       return;
     }
 
@@ -234,7 +253,22 @@ export class GradingScene extends Phaser.Scene {
       .setDisplaySize(1280, 720)
       .setAlpha(0.92);
     this.add.rectangle(640, 360, 1280, 720, 0x07131f, 0.12);
-    this.add.rectangle(640, 624, 1280, 192, 0x11151a, 0.58);
+    this.floorShade = this.add.rectangle(640, 624, 1280, 192, 0x11151a, 0.58).setVisible(false);
+
+    // Keep the painted tabletop in front of the examiners and behind the fighters.
+    const silhouette = this.add.graphics().setVisible(false).fillStyle(0xffffff);
+    silhouette.fillPoints([
+      { x: 493, y: 289 }, { x: 788, y: 289 }, { x: 803, y: 296 },
+      { x: 815, y: 374 }, { x: 464, y: 374 }, { x: 474, y: 296 },
+    ], true);
+    const tableMask = silhouette.createGeometryMask();
+    const table = this.add.container(0, 0, [
+      this.add.rectangle(640, 360, 1280, 720, 0x20242a),
+      this.add.image(640, 360, "dojoBackground").setDisplaySize(1280, 720).setAlpha(0.92),
+      this.add.rectangle(640, 360, 1280, 720, 0x07131f, 0.12),
+    ]).setDepth(2);
+    table.setMask(tableMask);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => tableMask.destroy());
   }
 
   private drawSplitScreenFrames(): void {
@@ -242,9 +276,12 @@ export class GradingScene extends Phaser.Scene {
     this.add.rectangle(954, 400, 516, 278, 0x000000, 0);
   }
 
-  private drawCast(): void {
-    Object.values(EXAMINERS).forEach(({ texture, x }) => {
-      this.add.image(x, 244, texture).setDisplaySize(126, 116);
+  private drawCast() {
+    const examiners = Object.values(EXAMINERS).map((examiner) => {
+      const seated = this.add.image(examiner.x, 244, examiner.texture).setDisplaySize(126, 116);
+      const plate = this.add.image(examiner.x, 244, examiner.texture).setDisplaySize(126, 116).setDepth(3);
+      plate.setCrop(50 / plate.scaleX, 103 / plate.scaleY, 27 / plate.scaleX, 10 / plate.scaleY);
+      return { ...examiner, seated, plate };
     });
     this.examinerBubble = undefined;
     const { height } = senseiRoster[this.selectedSensei];
@@ -253,16 +290,92 @@ export class GradingScene extends Phaser.Scene {
     this.scaleSpriteToHeight(this.senseiMarianneSprite, height);
     this.faceSensei(this.senseiMarianneSprite, "right");
     this.rememberSenseiHome(this.senseiMarianneSprite);
+    const fighters = [this.senseiMarianneSprite, ...this.drawStudentsForGrade()];
     if (ACTIVE_PLAYERS > 1) {
       const playerTwoSensei = this.add.image(1192, 438, "senseiGarvey").setOrigin(0.5);
       this.scaleSpriteToHeight(playerTwoSensei, 311);
       this.faceSensei(playerTwoSensei, "left");
+      fighters.push(playerTwoSensei);
     }
-    this.drawStudentsForGrade(this.activeRound.grade);
+    return { examiners, fighters };
   }
 
-  private drawStudentsForGrade(_grade: TechniqueRound["grade"]): void {
-    const attackerKey = "attackerReady";
+  private playEntrance(
+    examiners: Array<{ x: number; side: 1 | -1; walk: string; seated: Phaser.GameObjects.Image; plate: Phaser.GameObjects.Image }>,
+    fighters: Phaser.GameObjects.Image[],
+  ): void {
+    this.introducing = true;
+    examiners.forEach(({ seated, plate }) => {
+      seated.setVisible(false);
+      plate.setVisible(false);
+    });
+    fighters.forEach((fighter) => fighter.setVisible(false));
+    this.cameras.main.fadeIn(850);
+
+    const call = this.add.text(640, 424, "Sensei, ne rei!!", {
+      color: "#fff0a3", fontFamily: ARCADE_FONT, fontStyle: "bold", fontSize: "58px",
+      stroke: "#050913", strokeThickness: 9,
+    }).setOrigin(0.5).setAlpha(0).setDepth(SPEECH_DEPTH);
+    this.tweens.add({ targets: call, alpha: 1, delay: 850, duration: 180, hold: 730, yoyo: true,
+      onComplete: () => call.destroy() });
+
+    const walkAt = 1990;
+    const walkMs = 3160;
+    const sitMs = 380;
+    this.time.delayedCall(walkAt, () => {
+      examiners.forEach(({ x, side, walk, seated, plate }) => {
+        const walker = this.add.image(side === 1 ? -90 : 1370, 362, walk).setOrigin(0.5, 1);
+        this.scaleSpriteToHeight(walker, 198);
+        this.tweens.add({
+          targets: walker, x, duration: walkMs, ease: "Sine.easeInOut",
+          onUpdate: (tween) => {
+            const pace = tween.progress * 14;
+            const stride = Math.sin(pace * Math.PI);
+            const frame = Math.floor(pace) % 2 === 0 ? walk : `${walk}Step`;
+            if (walker.texture.key !== frame) walker.setTexture(frame);
+            const approach = Phaser.Math.Clamp((tween.progress - 0.75) / 0.25, 0, 1);
+            walker.setY(362 - 42 * approach - 3 * Math.abs(stride)).setRotation(stride * 0.035);
+          },
+          onComplete: () => {
+            walker.setTexture(`${walk}Step`).setRotation(0);
+            this.tweens.add({
+              targets: walker, y: seated.getTopCenter().y + walker.displayHeight, duration: sitMs, ease: "Sine.easeIn",
+              onComplete: () => {
+                walker.destroy();
+                seated.setVisible(true);
+                plate.setVisible(true);
+              },
+            });
+          },
+        });
+      });
+    });
+
+    const revealAt = walkAt + walkMs + sitMs + 220;
+    const flashMs = 85;
+    const flashes = 5;
+    this.time.delayedCall(revealAt, () => {
+      let pulse = 0;
+      this.time.addEvent({
+        delay: flashMs, repeat: flashes - 1,
+        callback: () => {
+          const visible = ++pulse % 2 === 1;
+          fighters.forEach((fighter) => fighter.setVisible(visible));
+        },
+      });
+    });
+
+    const revealEndsAt = revealAt + flashMs * flashes;
+    this.time.delayedCall(revealEndsAt + 480, () => this.beginGrading());
+  }
+
+  private drawStudentsForGrade(): Phaser.GameObjects.Image[] {
+    const choices = attackers.map((_, index) => index).filter(index => index !== this.attackerIndex);
+    this.attackerIndex = Phaser.Utils.Array.GetRandom(choices);
+    const attacker = attackers[this.attackerIndex];
+    const studentChoices = students.map((_, index) => index).filter(index => index !== this.studentIndex);
+    this.studentIndex = Phaser.Utils.Array.GetRandom(studentChoices);
+    const student = students[this.studentIndex];
 
     this.playerStudent?.destroy();
     this.attackerStudent?.destroy();
@@ -270,15 +383,16 @@ export class GradingScene extends Phaser.Scene {
     const playerX = ACTIVE_PLAYERS === 1 ? 510 : 352;
     const attackerX = ACTIVE_PLAYERS === 1 ? 770 : 600;
 
-    this.attackerStudent = this.add.image(attackerX, CHARACTER_FOOT_Y, attackerKey).setOrigin(0.5, 1);
-    this.scaleSpriteToHeight(this.attackerStudent, UKE_TARGET_HEIGHT);
+    this.attackerStudent = this.add.image(attackerX, CHARACTER_FOOT_Y, attacker.ready).setOrigin(0.5, 1);
+    this.scaleSpriteToHeight(this.attackerStudent, attacker.height);
     this.attackerStudent.setDepth(CHARACTER_DEPTH);
-    this.playerStudent = this.add.image(playerX, CHARACTER_FOOT_Y, "studentMaleBack").setOrigin(0.5, 1);
-    this.scaleSpriteToHeight(this.playerStudent, TORI_TARGET_HEIGHT);
+    this.playerStudent = this.add.image(playerX, CHARACTER_FOOT_Y, student.ready).setOrigin(0.5, 1);
+    this.scaleSpriteToHeight(this.playerStudent, student.height);
     this.playerStudent.setDepth(CHARACTER_DEPTH + 1);
 
     this.rememberCharacterHome(this.attackerStudent);
     this.rememberCharacterHome(this.playerStudent);
+    return [this.attackerStudent, this.playerStudent];
   }
 
   private selectedSenseiName(): string {
@@ -790,7 +904,7 @@ export class GradingScene extends Phaser.Scene {
     }
   }
 
-  private startPattern(): void {
+  private startPattern(reuseFighters = false): void {
     this.currentBeatIndex = 0;
     this.phaseFailed = false;
     this.phaseHadNonPerfect = false;
@@ -804,7 +918,7 @@ export class GradingScene extends Phaser.Scene {
       this.phaseStatuses = {};
       this.phaseScores = {};
       this.roundScore = 0;
-      this.drawStudentsForGrade(this.activeRound.grade);
+      if (!reuseFighters) this.drawStudentsForGrade();
     }
     this.activeMashInputs = this.activePhase.mode === "mash" ? this.randomMashInputs() : ["X", "RIGHT"];
     this.phaseStatuses[this.activePhase.id] = "active";
@@ -1380,8 +1494,9 @@ export class GradingScene extends Phaser.Scene {
         duration: 180,
         ease: "Sine.easeOut",
         onComplete: () => {
-          uke.setTexture("attackerHeavy");
-          this.scaleSpriteToHeight(uke, UKE_TARGET_HEIGHT);
+          const attacker = attackers[this.attackerIndex];
+          uke.setTexture(attacker.punch);
+          this.scaleSpriteToHeight(uke, attacker.height);
           uke.setOrigin(0.5, 1);
           this.tweens.add({
             targets: uke,
@@ -1401,11 +1516,7 @@ export class GradingScene extends Phaser.Scene {
               ease: "Back.easeOut",
             });
           } else {
-            tori.setTexture("studentMalePunched");
-            this.scaleSpriteToHeight(tori, TORI_TARGET_HEIGHT);
-            tori.setOrigin(0.5, 1);
-            tori.setDepth(CHARACTER_DEPTH + 1);
-            this.playDeathBounce(tori, -1);
+            this.playToriHit(tori);
           }
         },
       });
@@ -1425,11 +1536,7 @@ export class GradingScene extends Phaser.Scene {
         ease: "Sine.easeOut",
       });
       if (!success) {
-        tori.setTexture("studentMalePunched");
-        this.scaleSpriteToHeight(tori, TORI_TARGET_HEIGHT);
-        tori.setOrigin(0.5, 1);
-        tori.setDepth(CHARACTER_DEPTH + 1);
-        this.playDeathBounce(tori, -1);
+        this.playToriHit(tori);
       }
       this.time.delayedCall(success ? 860 : 2540, onComplete);
       return;
@@ -1444,11 +1551,12 @@ export class GradingScene extends Phaser.Scene {
         ease: "Cubic.easeOut",
       });
     } else {
-      this.playDeathBounce(tori, -1);
+      this.playToriHit(tori);
     }
     if (success) {
-      uke.setTexture("attackerThrown");
-      this.scaleSpriteToHeight(uke, UKE_TARGET_HEIGHT);
+      const attacker = attackers[this.attackerIndex];
+      uke.setTexture(attacker.thrown);
+      this.scaleSpriteToHeight(uke, attacker.height);
       uke.setOrigin(0.5, 1);
       this.playDeathBounce(uke, 1);
     } else {
@@ -1467,6 +1575,13 @@ export class GradingScene extends Phaser.Scene {
       });
     }
     this.time.delayedCall(success ? 2540 : 2540, onComplete);
+  }
+
+  private playToriHit(tori: Phaser.GameObjects.Image): void {
+    const student = students[this.studentIndex];
+    tori.setTexture(student.hit).setOrigin(0.5, 1);
+    this.scaleSpriteToHeight(tori, student.height);
+    this.playDeathBounce(tori, -1);
   }
 
   private playDeathBounce(sprite: Phaser.GameObjects.Image, direction: -1 | 1): void {
@@ -1786,7 +1901,6 @@ export class GradingScene extends Phaser.Scene {
     }
 
     this.phaseScores[this.activePhase.id] = this.currentPhaseScore;
-    this.time.delayedCall(520, () => this.restoreOneHeart(true));
     this.time.delayedCall(980, () => {
       this.specialInProgress = false;
       this.skipNextSenseiSpeech = true;
@@ -1796,62 +1910,6 @@ export class GradingScene extends Phaser.Scene {
       this.renderPhaseVisual("PERFECT");
       this.completePhase();
     });
-  }
-
-  private restoreOneHeart(showSplash = false): void {
-    if (this.failures <= 0) {
-      return;
-    }
-
-    this.failures -= 1;
-    this.lostLifeIndexes.delete(this.failures);
-    const heart = this.lifeIcons[this.failures];
-    if (!heart) {
-      return;
-    }
-
-    this.tweens.killTweensOf(heart);
-    heart.setText("♥");
-    heart.setFontSize(38);
-    heart.setColor("#ff4d63");
-    heart.setAlpha(1);
-    heart.setScale(1);
-    heart.setVisible(true);
-    heart.setPosition(heart.getData("homeX") as number, heart.getData("homeY") as number);
-    this.tweens.add({
-      targets: heart,
-      scale: 1.28,
-      duration: 150,
-      yoyo: true,
-      ease: "Back.easeOut",
-    });
-
-    if (showSplash) {
-      const restoredHeart = this.add.text(640, 438, "♥ RESTORED", {
-        color: "#ff4d63",
-        fontSize: "50px",
-        fontFamily: ARCADE_FONT,
-        fontStyle: "bold",
-        stroke: "#050913",
-        strokeThickness: 10,
-      }).setOrigin(0.5).setDepth(SPECIAL_DEPTH + 5);
-      this.tweens.add({
-        targets: restoredHeart,
-        scale: 1.16,
-        duration: 260,
-        yoyo: true,
-        repeat: 1,
-        ease: "Back.easeOut",
-        onComplete: () => {
-          this.tweens.add({
-            targets: restoredHeart,
-            alpha: 0,
-            duration: 420,
-            onComplete: () => restoredHeart.destroy(),
-          });
-        },
-      });
-    }
   }
 
   private setHudDepth(depth: number): void {
@@ -2800,7 +2858,7 @@ export class GradingScene extends Phaser.Scene {
     this.lifeIcons = [];
     this.gameOverText?.setVisible(false);
     this.wisdom.reset();
-    this.scene.restart({ selectedSensei: this.selectedSensei });
+    this.scene.restart({ selectedSensei: this.selectedSensei, skipEntrance: true });
   }
 
   private phaseCompletionLine(): string {
