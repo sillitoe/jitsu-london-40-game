@@ -5,6 +5,7 @@ import { students } from "../data/students";
 import { senseiRoster, senseiTexture } from "../data/sensei";
 import { prototypeRounds } from "../data/prototypeBeats";
 import { RhythmJudge } from "../systems/RhythmJudge";
+import { readGamepadPresses } from "../systems/gamepad";
 import { stepSweep, SWEEP_LIMIT, type StepDirection } from "../systems/StepSweep";
 import { WisdomMeter } from "../systems/WisdomMeter";
 import { inputIconTexture } from "../ui/inputIcons";
@@ -42,6 +43,7 @@ const ROUND_INTRO_MS = GRADING_NOTICE_MS + STEVE_NOTICE_MS + GARETH_NOTICE_MS + 
 const PHASE_LEAD_IN_MS = 650;
 const WISDOM_LEAD_IN_MS = 1600;
 const FINAL_SCORE_HOLD_MS = 5400;
+const VICTORY_HOLD_MS = 8800;
 const KUZUSHI_COMMAND_LEAD_IN_MS = 1450;
 const DEFAULT_WINDOW: RhythmWindow = { perfectMs: 42, goodMs: 160, lateMs: 260 };
 const TOTAL_ROUNDS = prototypeRounds.length;
@@ -76,7 +78,6 @@ export class GradingScene extends Phaser.Scene {
   private lastCountdownMessage = "";
   private runComplete = false;
   private introducing = false;
-  private skipEntrance = false;
   private attackerIndex = -1;
   private studentIndex = -1;
   private showingFinalScore = false;
@@ -156,21 +157,16 @@ export class GradingScene extends Phaser.Scene {
     super("GradingScene");
   }
 
-  init(data?: { selectedSensei?: PlayableSenseiId; skipEntrance?: boolean }): void {
+  init(data?: { selectedSensei?: PlayableSenseiId }): void {
     this.selectedSensei = data?.selectedSensei ?? this.selectedSensei ?? "marianne";
     this.resetRuntimeState();
-    this.skipEntrance = data?.skipEntrance ?? false;
   }
 
   create(): void {
     this.drawGradingHall();
     this.drawSplitScreenFrames();
     const { examiners, fighters } = this.drawCast();
-    if (!this.skipEntrance) {
-      this.playEntrance(examiners, fighters);
-      return;
-    }
-    this.beginGrading();
+    this.playEntrance(examiners, fighters);
   }
 
   private beginGrading(): void {
@@ -192,6 +188,7 @@ export class GradingScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.sound.stopByKey("gradingPanicTheme");
       this.sound.stopByKey("gameOverSting");
+      this.sound.stopByKey("victoryFanfare");
     });
   }
 
@@ -232,14 +229,24 @@ export class GradingScene extends Phaser.Scene {
     this.phaseOverlayItems = [];
     this.beltMarkers = [];
     this.lifeIcons = [];
+    this.touchStart = undefined;
+    this.recentTapTimes = [];
     this.wisdom.reset();
   }
 
   update(): void {
+    const presses = readGamepadPresses();
     if (this.introducing || this.specialInProgress || this.showingFinalScore) {
       return;
     }
 
+    for (const action of presses) {
+      if (action === "SPECIAL") {
+        this.triggerWisdom();
+      } else if (action !== "START") {
+        this.handleInput(action);
+      }
+    }
     this.renderTimingLane();
     this.renderWisdomMeter();
     if (this.failures >= MAX_FAILURES - 1) {
@@ -685,7 +692,7 @@ export class GradingScene extends Phaser.Scene {
   }
 
   private drawWisdomPrompt(x: number): void {
-    const panel = this.add.rectangle(0, 0, 282, 70, 0x050913).setStrokeStyle(4, 0xffe478);
+    const panel = this.add.rectangle(38, 0, 358, 70, 0x050913).setStrokeStyle(4, 0xffe478);
     const tail = this.add.graphics().fillStyle(0xffe478).fillTriangle(-9, -36, 9, -36, 0, -48);
     const keycap = this.add.rectangle(-106, 0, 42, 42, 0x15202d).setStrokeStyle(2, 0x6299b5);
     const returnIcon = this.add.graphics().lineStyle(4, 0xf5f2eb);
@@ -695,7 +702,7 @@ export class GradingScene extends Phaser.Scene {
     const title = this.add.text(-74, -13, "WISDOM READY!", {
       fontFamily: ARCADE_FONT, fontStyle: "bold", fontSize: "22px", color: "#ffe478",
     }).setOrigin(0, 0.5);
-    const controls = this.add.text(-74, 13, "RETURN / TRIPLE TAP", {
+    const controls = this.add.text(-74, 13, "RETURN • B / CIRCLE • TRIPLE TAP", {
       fontFamily: ARCADE_FONT, fontStyle: "bold", fontSize: "16px", color: "#f5f2eb",
     }).setOrigin(0, 0.5);
     this.wisdomPrompt = this.add.container(x, 198, [tail, panel, keycap, returnIcon, title, controls])
@@ -863,7 +870,6 @@ export class GradingScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown-X", () => this.handleInput("X"));
     this.input.keyboard?.on("keydown-SPACE", () => this.handleInput("X"));
     this.input.keyboard?.on("keydown-ENTER", () => this.triggerWisdom());
-    this.input.keyboard?.on("keydown-ESC", () => this.resetGame());
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       this.touchStart = { x: pointer.x, y: pointer.y, time: this.currentSceneTime() };
     });
@@ -1289,14 +1295,19 @@ export class GradingScene extends Phaser.Scene {
     this.hideExaminerSpeech();
     this.wisdomPrompt.setVisible(false);
     this.sound.stopByKey("gradingPanicTheme");
-    this.sound.play("gameOverSting", { volume: 0.72 });
-    this.add.rectangle(640, 360, 1280, 720, 0x050913, 0.82).setDepth(SPEECH_DEPTH + 9);
-    this.gameOverText.setPosition(640, 308)
-      .setText(cleared ? "GRADING COMPLETE" : "GAME OVER")
+    if (cleared) {
+      this.sound.play("victoryFanfare", { volume: 0.72 });
+      this.add.image(640, 360, "arcadeVictory").setDepth(SPEECH_DEPTH + 9);
+    } else {
+      this.sound.play("gameOverSting", { volume: 0.72 });
+      this.add.rectangle(640, 360, 1280, 720, 0x050913, 0.82).setDepth(SPEECH_DEPTH + 9);
+    }
+    this.gameOverText.setPosition(640, cleared ? 66 : 308)
+      .setText(cleared ? "BLACK BELT EARNED!" : "GAME OVER")
       .setColor(cleared ? "#ffe478" : "#ff2438")
       .setDepth(SPEECH_DEPTH + 10).setVisible(true).setAlpha(0).setScale(1.15);
-    const finalScore = this.add.text(640, 400, `FINAL SCORE  ${String(this.score).padStart(6, "0")}`, {
-      color: "#fff0a3", fontFamily: ARCADE_FONT, fontSize: "44px", fontStyle: "bold",
+    const finalScore = this.add.text(640, cleared ? 134 : 400, `FINAL SCORE  ${String(this.score).padStart(6, "0")}`, {
+      color: "#fff0a3", fontFamily: ARCADE_FONT, fontSize: cleared ? "32px" : "44px", fontStyle: "bold",
       stroke: "#050913", strokeThickness: 6,
     }).setOrigin(0.5).setDepth(SPEECH_DEPTH + 10).setAlpha(0);
     this.tweens.add({
@@ -1307,7 +1318,7 @@ export class GradingScene extends Phaser.Scene {
       ease: "Back.easeOut",
     });
     this.tweens.add({ targets: finalScore, alpha: 1, delay: 380, duration: 300 });
-    this.nextStepTimer = this.time.delayedCall(FINAL_SCORE_HOLD_MS, () => {
+    this.nextStepTimer = this.time.delayedCall(cleared ? VICTORY_HOLD_MS : FINAL_SCORE_HOLD_MS, () => {
       this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
         this.scene.start("AttractScene");
       });
@@ -1695,7 +1706,7 @@ export class GradingScene extends Phaser.Scene {
     this.scheduleGarethVerdict(failed, allPerfect);
 
     if (this.roundsCompleted >= TOTAL_ROUNDS) {
-      this.nextStepTimer = this.time.delayedCall(2600, () => this.showFinalScore(!failed));
+      this.nextStepTimer = this.time.delayedCall(2600, () => this.showFinalScore(!failed && this.activeRound.grade === "black"));
       return;
     }
 
@@ -2706,7 +2717,7 @@ export class GradingScene extends Phaser.Scene {
 
   private lockedRunMessage(): string {
     if (this.roundsCompleted >= TOTAL_ROUNDS) {
-      return "GRADING COMPLETE - PRESS ESC TO RESET";
+      return "GRADING COMPLETE";
     }
 
     return `${this.nextRunLabel()} INCOMING`;
@@ -2813,52 +2824,6 @@ export class GradingScene extends Phaser.Scene {
     if (this.currentBeatIndex >= this.activePhase.prompts.length) {
       this.completePhase();
     }
-  }
-
-  private resetGame(): void {
-    if (this.showingFinalScore) {
-      this.scene.start("AttractScene");
-      return;
-    }
-    this.nextStepTimer?.remove();
-    this.nextStepTimer = undefined;
-    this.hideSenseiSpeech();
-    this.specialOverlay?.destroy();
-    this.specialBubble?.destroy();
-    this.specialPointer?.destroy();
-    this.specialText?.destroy();
-    this.specialOverlay = undefined;
-    this.specialBubble = undefined;
-    this.specialPointer = undefined;
-    this.specialText = undefined;
-    this.cameras.main.setZoom(1);
-    this.cameras.main.centerOn(640, 360);
-    this.setHudDepth(UI_DEPTH + 1);
-    this.currentRoundIndex = 0;
-    this.currentPhaseIndex = 0;
-    this.currentBeatIndex = 0;
-    this.runComplete = false;
-    this.specialInProgress = false;
-    this.skipNextSenseiSpeech = false;
-    this.roundsCompleted = 0;
-    this.phaseFailed = false;
-    this.mashPresses = 0;
-    this.lastMashInput = undefined;
-    this.failures = 0;
-    this.lostLifeIndexes.clear();
-    this.score = 0;
-    this.scoreMultiplier = 1;
-    this.roundScore = 0;
-    this.currentPhaseScore = 0;
-    this.phaseScores = {};
-    this.phaseStatuses = {};
-    this.beatTiles = [];
-    this.phaseOverlayItems = [];
-    this.beltMarkers = [];
-    this.lifeIcons = [];
-    this.gameOverText?.setVisible(false);
-    this.wisdom.reset();
-    this.scene.restart({ selectedSensei: this.selectedSensei, skipEntrance: true });
   }
 
   private phaseCompletionLine(): string {

@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { senseiRoster, senseiTexture } from "../data/sensei";
+import { readGamepadPresses } from "../systems/gamepad";
 import type { PlayableSenseiId } from "../types";
 
 const ARCADE_FONT = '"Courier New", "Monaco", monospace';
@@ -44,7 +45,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       this.cards.push(this.createSenseiCard(choice, 640 + (index - (SENSEI_CHOICES.length - 1) / 2) * 218, 368));
     });
 
-    this.startHint = this.add.text(640, 646, "TAP SENSEI OR LEFT / RIGHT    SPACE / ENTER TO START", {
+    this.startHint = this.add.text(640, 646, "LEFT / RIGHT TO CHOOSE  •  SPACE / ENTER OR A / CROSS TO START  •  TAP SENSEI", {
       color: "#fff0a3",
       fontSize: "20px",
       fontStyle: "bold",
@@ -56,6 +57,13 @@ export class CharacterSelectScene extends Phaser.Scene {
     this.bindInput();
     this.startSelectMusic();
     this.refreshSelection();
+  }
+
+  update(): void {
+    const presses = readGamepadPresses();
+    if (presses.has("LEFT")) this.moveSelection(-1);
+    if (presses.has("RIGHT")) this.moveSelection(1);
+    if (presses.has("X") || presses.has("START")) this.startGrading();
   }
 
   private createSenseiCard(id: PlayableSenseiId, x: number, y: number): Phaser.GameObjects.Container {

@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { readGamepadPresses } from "../systems/gamepad";
 import { inputIconTexture } from "../ui/inputIcons";
 
 const FONT = '"Courier New", "Monaco", monospace';
@@ -41,35 +42,37 @@ export class AttractScene extends Phaser.Scene {
     });
 
     const rows = [
-      ["DIRECTION", null, "SWIPE LEFT / DOWN / RIGHT"],
-      ["ACTION", "X / SPACE", "TAP"],
-      ["WISDOM SPECIAL", "RETURN", "TRIPLE TAP"],
+      ["DIRECTION", null, "SWIPE LEFT / DOWN / RIGHT", "D-PAD / STICK"],
+      ["ACTION", "X / SPACE", "TAP", "A / CROSS"],
+      ["WISDOM SPECIAL", "RETURN", "TRIPLE TAP", "B / CIRCLE"],
     ] as const;
     controls.add([
-      this.label(306, 346, "CONTROLS", 22, "#5ee7ff"),
-      this.label(592, 346, "KEYBOARD", 22, "#5ee7ff"),
-      this.label(934, 346, "TOUCH", 22, "#5ee7ff"),
+      this.label(270, 346, "CONTROLS", 22, "#5ee7ff"),
+      this.label(503, 346, "KEYBOARD", 22, "#5ee7ff"),
+      this.label(758, 346, "TOUCH", 22, "#5ee7ff"),
+      this.label(1018, 346, "CONTROLLER", 22, "#5ee7ff"),
     ]);
-    rows.forEach(([action, keyboard, touch], index) => {
+    rows.forEach(([action, keyboard, touch, controller], index) => {
       const y = 396 + index * 63;
       controls.add([
         this.add.rectangle(640, y, 990, 54, 0x081929).setStrokeStyle(2, 0x206497),
-        this.label(306, y, action, 26, "#ffe478"),
-        this.label(934, y, touch, 23),
+        this.label(270, y, action, 22, "#ffe478"),
+        this.label(758, y, touch, 17),
+        this.label(1018, y, controller, 21),
       ]);
       if (keyboard) {
-        controls.add(this.label(592, y, keyboard, 29));
+        controls.add(this.label(503, y, keyboard, 24));
       } else {
         (["LEFT", "DOWN", "RIGHT"] as const).forEach((direction, arrowIndex) => {
-          controls.add(this.add.image(592 + (arrowIndex - 1) * 60, y, inputIconTexture(direction)));
+          controls.add(this.add.image(503 + (arrowIndex - 1) * 54, y, inputIconTexture(direction)));
         });
       }
     });
     controls.add(this.label(640, 571, "WISDOM SPECIAL REQUIRES A FULL METER DURING KAKE", 18));
     controls.setVisible(false);
 
-    this.add.rectangle(640, 659, 590, 58, 0x050913, 0.96).setStrokeStyle(3, 0x00d8ff);
-    const start = this.label(640, 659, "PRESS ENTER  /  TAP TO PLAY", 28, "#ffe478");
+    this.add.rectangle(640, 659, 720, 58, 0x050913, 0.96).setStrokeStyle(3, 0x00d8ff);
+    const start = this.label(640, 659, "PRESS ENTER OR A / CROSS  •  TAP TO PLAY", 25, "#ffe478");
     this.tweens.add({ targets: start, alpha: 0.65, duration: 650, yoyo: true, repeat: -1 });
     const rotate = () => {
       splash.setVisible(!splash.visible);
@@ -81,6 +84,11 @@ export class AttractScene extends Phaser.Scene {
     this.input.keyboard?.once("keydown-ENTER", begin);
     this.input.keyboard?.once("keydown-SPACE", begin);
     this.input.once("pointerup", begin);
+  }
+
+  update(): void {
+    const presses = readGamepadPresses();
+    if (presses.has("X") || presses.has("START")) this.scene.start("CharacterSelectScene");
   }
 
   private label(x: number, y: number, text: string, size: number, color = "#f5f2eb"): Phaser.GameObjects.Text {

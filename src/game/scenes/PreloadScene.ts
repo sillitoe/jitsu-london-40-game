@@ -70,8 +70,10 @@ export class PreloadScene extends Phaser.Scene {
     this.load.audio("characterSelectTheme", assetUrl("/audio/character-select-theme.wav"));
     this.load.audio("gradingPanicTheme", assetUrl("/audio/grading-panic-theme.wav"));
     this.load.audio("gameOverSting", assetUrl("/audio/game-over-sting.wav"));
+    this.load.audio("victoryFanfare", assetUrl("/audio/victory-fanfare.wav"));
     this.load.image("dojoBackground", assetUrl("/backgrounds/dojo-london.webp"));
     this.load.image("arcadeSplash", assetUrl("/backgrounds/arcade-splash-ruby-v3.webp"));
+    this.load.image("arcadeVictory", assetUrl("/backgrounds/arcade-victory.webp"));
     this.load.image("examinerSteve", assetUrl("/sprites/examiner-steve.png"));
     this.load.image("examinerGareth", assetUrl("/sprites/examiner-gareth.png"));
     this.load.image("examinerSteveWalk", assetUrl("/sprites/examiner-steve-walk.webp"));
